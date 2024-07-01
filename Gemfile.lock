@@ -1,0 +1,20 @@
+PATH
+  remote: .
+  specs:
+    minimalist_ods (0.1.0)
+      rubyzip
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    rubyzip (2.3.2)
+
+PLATFORMS
+  ruby
+  x86_64-linux
+
+DEPENDENCIES
+  minimalist_ods!
+
+BUNDLED WITH
+   2.5.14
