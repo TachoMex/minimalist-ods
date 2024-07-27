@@ -83,6 +83,15 @@ ods.close_table
 ods.close_file
 ```
 
+### Aditional options
+
+```ruby
+ods = MinimalistODS.new(
+  save_to_disk: false # Allows you to create only the buffer of the ODS file
+  # A filename is not required if set to false. You can retrieve the data using the 'file_buffer' method after closing the file.
+)
+```
+
 ## Contributions
 
 Contributions are welcome. Please open an issue or a pull request on the [GitHub repository](https://github.com/tachomex/minimalist_ods).

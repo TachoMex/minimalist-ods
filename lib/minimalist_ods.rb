@@ -2,6 +2,7 @@
 
 # A Ruby Minimalist ODS
 require 'rubygems'
+require 'stringio'
 require 'zip'
 require 'date'
 
@@ -94,43 +95,9 @@ class MinimalistODS
     </table:table-cell>
   XML
 
-  TABLE_OPEN = 1
-  TABLE_CLOSED = 0
-
-  attr_reader :zip, :save_as, :creator, :buffer
-
-  def initialize(save_as, creator = 'minimalist-ods')
-    @save_as = save_as
-    @creator = creator
-    init_zip!
-    init_mimetype!
-    init_meta!
-    init_manifest!
-    init_content!
-  end
-
-  def init_zip!
-    @zip = Zip::File.open(save_as, Zip::File::CREATE)
-  end
-
-  def init_mimetype!
-    write_to_zip('mimetype', MIMETYPE)
-  end
-
-  def init_meta!
-    meta = META_TEMPLATE.gsub(':CREATOR', creator).gsub(':TIME', Time.now.strftime('%Y-%m-%dT%H:%M:%S'))
-    write_to_zip('meta.xml', meta)
-  end
-
-  def init_manifest!
-    write_to_zip('META-INF/manifest.xml', MANIFEST_TEMPLATE)
-  end
-
-  def init_content!
-    @buffer = @zip.get_output_stream('content.xml')
-    @status = TABLE_CLOSED
-    buffer.write(CONTENT_HEADER)
-  end
+  TABLE_OPEN = 0
+  TABLE_CLOSED = 1
+  FILE_CLOSED = 2
 
   class MinimalistOODSError < StandardError
   end
@@ -153,16 +120,42 @@ class MinimalistODS
     end
   end
 
+  class FileClosed < MinimalistOODSError
+    def initialize
+      super('The file is now closed')
+    end
+  end
+
+  class FileNotClosed < MinimalistOODSError
+    def initialize
+      super('The file is still opened')
+    end
+  end
+
   class InvalidParameter < MinimalistOODSError
   end
 
+  attr_reader :zip_buffer, :content_buffer, :save_as, :save_to_disk, :creator
+
+  def initialize(save_as = nil, creator = 'minimalist-ods', **options)
+    @save_as = save_as
+    @creator = creator
+
+    @save_to_disk = options.fetch(:save_to_disk, true)
+    raise InvalidParameter, 'Filename is required if save to disk is enabled' if save_as.nil? && save_to_disk
+
+    init_content
+  end
+
   def open_table(table_name, cols_number)
+    raise FileClosed if @status == FILE_CLOSED
     raise TableAlreadyOpened if @status == TABLE_OPEN
     raise InvalidParameter, "Got invalid value `#{cols_number}' for table size" if cols_number.nil? || !cols_number.is_a?(Integer) || !cols_number.positive?
+
     @cols_number = cols_number
 
     table_header = TABLE_TEMPLATE.gsub(':NAME', table_name).gsub(':COL_NUMBER', cols_number.to_s)
-    buffer.write(table_header)
+    content_buffer.write(table_header)
     @status = TABLE_OPEN
   end
 
@@ -170,29 +163,63 @@ class MinimalistODS
     raise InvalidRowLength.new(@cols_number, row.size) if row.size != @cols_number
 
     cells = row.map { |cell| cell_to_xml(cell) }.join
-    buffer.write(ROW_TEMPLATE.gsub(':CELLS', cells))
+    content_buffer.write(ROW_TEMPLATE.gsub(':CELLS', cells))
   end
-
 
   def close_table
     raise TableNotOpened if @status == TABLE_CLOSED
 
-    buffer.write('</table:table>')
+    content_buffer.write('</table:table>')
     @status = TABLE_CLOSED
   end
 
   def close_file
-    buffer.write(CONTENT_FOOTER)
-    buffer.close
-    zip.close
+    raise TableAlreadyOpened if @status == TABLE_OPEN
+
+    content_buffer.write(CONTENT_FOOTER)
+    @status = FILE_CLOSED
+    create_zip
+    write_file! if save_to_disk
+  end
+
+  def file_buffer
+    raise FileNotClosed unless @status == FILE_CLOSED
+
+    zip_buffer.string
   end
 
   private
 
-  def write_to_zip(file_name, content)
-    stream = zip.get_output_stream(file_name)
-    stream.write(content)
-    stream.close
+  def init_content
+    @content_buffer = StringIO.new
+    content_buffer.write(CONTENT_HEADER)
+    @status = TABLE_CLOSED
+  end
+
+  def format_meta
+    META_TEMPLATE.gsub(':CREATOR', creator).gsub(':TIME', Time.now.strftime('%Y-%m-%dT%H:%M:%S'))
+  end
+
+  def create_zip
+    @zip_buffer = Zip::OutputStream.write_buffer do |zip_handler|
+      zip_handler.put_next_entry('mimetype')
+      zip_handler.write(MIMETYPE)
+
+      zip_handler.put_next_entry('meta.xml')
+      zip_handler.write(format_meta)
+
+      zip_handler.put_next_entry('META-INF/manifest.xml')
+      zip_handler.write(MANIFEST_TEMPLATE)
+
+      zip_handler.put_next_entry('content.xml')
+      zip_handler.write(content_buffer.string)
+    end
+  end
+
+  def write_file!
+    File.open(save_as, 'wb') do |file|
+      file.write(get_file_buffer)
+    end
   end
 
   def cell_to_xml(cell)
