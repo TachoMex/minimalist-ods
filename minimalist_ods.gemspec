@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |spec|
   spec.name          = "minimalist_ods"
-  spec.version       = "0.1.0"
+  spec.version       = "0.2.0"
   spec.authors       = ["Gilberto Vargas"]
   spec.email         = ["tachoguitar@gmail.com"]
   spec.summary       = %q{A minimalist ODS generator}
