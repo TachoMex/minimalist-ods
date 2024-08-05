@@ -137,12 +137,10 @@ class MinimalistODS
 
   attr_reader :zip_buffer, :content_buffer, :save_as, :save_to_disk, :creator
 
-  def initialize(save_as = nil, creator = 'minimalist-ods', **options)
+  def initialize(save_as = nil, creator = 'minimalist-ods')
     @save_as = save_as
     @creator = creator
-
-    @save_to_disk = options.fetch(:save_to_disk, true)
-    raise InvalidParameter, 'Filename is required if save to disk is enabled' if save_as.nil? && save_to_disk
+    @save_to_disk = !(save_as.instance_of? StringIO)
 
     init_content
   end
@@ -179,13 +177,7 @@ class MinimalistODS
     content_buffer.write(CONTENT_FOOTER)
     @status = FILE_CLOSED
     create_zip
-    write_file! if save_to_disk
-  end
-
-  def file_buffer
-    raise FileNotClosed unless @status == FILE_CLOSED
-
-    zip_buffer.string
+    write_file!
   end
 
   private
@@ -217,8 +209,13 @@ class MinimalistODS
   end
 
   def write_file!
-    File.open(save_as, 'wb') do |file|
-      file.write(get_file_buffer)
+    if save_to_disk
+      File.open(save_as, 'wb') do |file|
+        file.write(zip_buffer.string)
+      end
+    else
+      save_as.write(zip_buffer.string)
+      save_as.rewind
     end
   end
 

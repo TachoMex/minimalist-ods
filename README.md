@@ -83,13 +83,16 @@ ods.close_table
 ods.close_file
 ```
 
-### Aditional options
+### Create ODS in buffer
+
+It is possible to avoid writing the file to disk if you pass a StringIO object as the first parameter. You will still need to close the file before reading the buffer.
 
 ```ruby
-ods = MinimalistODS.new(
-  save_to_disk: false # Allows you to create only the buffer of the ODS file
-  # A filename is not required if set to false. You can retrieve the data using the 'file_buffer' method after closing the file.
-)
+file_buffer = StringIO.new
+ods = MinimalistODS.new(file_buffer)
+...
+ods.close_file
+# Do something with file_buffer.read
 ```
 
 ## Contributions
